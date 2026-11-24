@@ -1,3 +1,4 @@
+0.5.0 : suivi personnel (historique de tout ce qui est vu, lu ou écouté ; objectifs de l'année).
 0.4.0 : sources de sous-titres gratuites « WolfFlix · SubDL » et « WolfFlix · Podnapisi » (recherche manuelle et téléchargement automatique, packs de saison, sous-titres forcés reconnus).
 0.3.1 : page de réglages réordonnée (bloc « À venir » après les sous-titres).
 0.3.0 : « À venir » et « Ce qui manque » (sagas de films et séries, dates françaises via TMDB).

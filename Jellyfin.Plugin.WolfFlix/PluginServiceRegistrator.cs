@@ -16,6 +16,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<AnalyseSousTitres>();
         serviceCollection.AddSingleton<Avis>();
         serviceCollection.AddSingleton<AVenir>();
+        serviceCollection.AddSingleton<Suivi>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<Suivi>());
 
         // Sources de sous-titres gratuites (visibles dans « Rechercher des sous-titres » et le téléchargement auto)
         serviceCollection.AddSingleton<ISubtitleProvider, SourceSubdl>();

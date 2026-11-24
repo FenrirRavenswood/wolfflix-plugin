@@ -22,9 +22,11 @@ public class WolfFlixController : ControllerBase
     private readonly Avis _avis;
     private readonly IUserManager _utilisateurs;
     private readonly AVenir _aVenir;
+    private readonly Suivi _suivi;
 
-    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir)
+    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi)
     {
+        _suivi = suivi;
         _aVenir = aVenir;
         _notes = notes;
         _bibliotheque = bibliotheque;
@@ -361,5 +363,46 @@ public class WolfFlixController : ControllerBase
         }
 
         return Accepted();
+    }
+    /// <summary>Suivi personnel : historique complet et objectifs de l'utilisateur connecté.</summary>
+    [HttpGet("Suivi")]
+    public ActionResult LireSuivi()
+    {
+        if (Moi is not Guid moi)
+        {
+            return Unauthorized();
+        }
+
+        var l = _suivi.Historique(moi);
+        return Ok(new
+        {
+            lectures = l.Select(x => new { i = x.I, d = x.D, t = x.T, n = x.N, s = x.S, p = x.P, x = x.X, m = x.M, o = x.O }),
+            objectifs = _suivi.LireObjectifs(moi)
+        });
+    }
+
+    /// <summary>Objectifs de l'année.</summary>
+    [HttpPost("Suivi/Objectifs")]
+    public ActionResult EcrireObjectifs([FromBody] Objectifs objectifs)
+    {
+        if (Moi is not Guid moi)
+        {
+            return Unauthorized();
+        }
+
+        _suivi.EcrireObjectifs(moi, objectifs);
+        return Ok(_suivi.LireObjectifs(moi));
+    }
+
+    /// <summary>Retire une entrée de son historique.</summary>
+    [HttpDelete("Suivi/Lecture")]
+    public ActionResult RetirerLecture([FromQuery] string item, [FromQuery] DateTime date)
+    {
+        if (Moi is not Guid moi)
+        {
+            return Unauthorized();
+        }
+
+        return _suivi.Retirer(moi, item ?? string.Empty, date) ? NoContent() : NotFound();
     }
 }
