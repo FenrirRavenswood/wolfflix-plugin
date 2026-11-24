@@ -246,34 +246,62 @@ public sealed class AVenir
             var series = _bibliotheque.GetItemList(new InternalItemsQuery { IncludeItemTypes = new[] { BaseItemKind.Series }, Recursive = true });
             var episodes = _bibliotheque.GetItemList(new InternalItemsQuery { IncludeItemTypes = new[] { BaseItemKind.Episode }, Recursive = true, IsVirtualItem = false });
             var possedesParSaison = new Dictionary<(Guid, int), HashSet<int>>();
+            // Une même série TMDB peut exister plusieurs fois dans Jellyfin (deux bibliothèques, deux dossiers) :
+            // on la traite une seule fois, avec les épisodes de toutes ses copies.
+            var tmdbDeSerie = new Dictionary<Guid, int>();
+            var seriesParTmdb = new Dictionary<int, List<BaseItem>>();
+            foreach (var se in series)
+            {
+                if (int.TryParse(se.GetProviderId(MetadataProvider.Tmdb), NumberStyles.Integer, CultureInfo.InvariantCulture, out var t) && t > 0)
+                {
+                    tmdbDeSerie[se.Id] = t;
+                    if (!seriesParTmdb.TryGetValue(t, out var l))
+                    {
+                        seriesParTmdb[t] = l = new List<BaseItem>();
+                    }
+
+                    l.Add(se);
+                }
+            }
+
+            var possedesParSaison = new Dictionary<(int, int), HashSet<int>>();
+            var totalPossede = new Dictionary<int, int>();
             foreach (var ep in episodes.OfType<Episode>())
             {
-                if (ep.ParentIndexNumber is not int s || ep.IndexNumber is not int n)
+                var numSaison = ep.ParentIndexNumber ?? ep.Season?.IndexNumber;
+                if (numSaison is not int s || ep.IndexNumber is not int n || !tmdbDeSerie.TryGetValue(ep.SeriesId, out var tmdbSerie))
                 {
                     continue;
                 }
 
-                var k = (ep.SeriesId, s);
+                var k = (tmdbSerie, s);
                 if (!possedesParSaison.TryGetValue(k, out var set))
                 {
                     possedesParSaison[k] = set = new HashSet<int>();
                 }
 
-                set.Add(n);
+                if (set.Add(n) && s > 0)
+                {
+                    totalPossede[tmdbSerie] = totalPossede.GetValueOrDefault(tmdbSerie) + 1;
+                }
+
                 if (ep.IndexNumberEnd is int fin)
                 {
                     for (int x = n + 1; x <= fin; x++)
                     {
-                        set.Add(x);
+                        if (set.Add(x) && s > 0)
+                        {
+                            totalPossede[tmdbSerie] = totalPossede.GetValueOrDefault(tmdbSerie) + 1;
+                        }
                     }
                 }
             }
 
             var entreesSeries = new List<(Entree E, bool Futur)>();
             fait = 0;
-            await Parallele(series.Where(s => int.TryParse(s.GetProviderId(MetadataProvider.Tmdb), out _)).ToList(), 6, async serie =>
+            await Parallele(seriesParTmdb.Keys.ToList(), 6, async tid =>
             {
-                var tid = int.Parse(serie.GetProviderId(MetadataProvider.Tmdb)!, CultureInfo.InvariantCulture);
+                var serie = seriesParTmdb[tid][0];
                 using var j = await Demander(client, $"tv/{tid}", cle, annulation).ConfigureAwait(false);
                 if (j == null)
                 {
@@ -310,6 +338,23 @@ public sealed class AVenir
                         Lien = lien
                     }, true));
                 }
+
+                // Total des épisodes déjà diffusés (hors épisodes spéciaux) : si tu en as autant, la série est complète
+                // même quand la numérotation de Jellyfin (TVDB, ordre DVD…) diffère de celle de TMDB.
+                int totalAttendu = 0;
+                if (r.TryGetProperty("seasons", out var toutes))
+                {
+                    foreach (var sa in toutes.EnumerateArray())
+                    {
+                        int s = Entier(sa, "season_number");
+                        if (s > 0 && s <= derniereS)
+                        {
+                            totalAttendu += s < derniereS ? Entier(sa, "episode_count") : dernierE;
+                        }
+                    }
+                }
+
+                bool complete = totalAttendu > 0 && totalPossede.GetValueOrDefault(tid) >= totalAttendu;
 
                 if (r.TryGetProperty("seasons", out var saisons))
                 {
@@ -348,9 +393,21 @@ public sealed class AVenir
                         }
 
                         // Épisodes déjà diffusés qui manquent chez toi
+                        if (complete)
+                        {
+                            continue;
+                        }
+
                         int attendus = s < derniereS ? nb : dernierE;
-                        possedesParSaison.TryGetValue((serie.Id, s), out var possedes);
+                        possedesParSaison.TryGetValue((tid, s), out var possedes);
                         int manque = Enumerable.Range(1, Math.Max(0, attendus)).Count(n => possedes == null || !possedes.Contains(n));
+
+                        // Autant d'épisodes que prévu mais numérotés autrement : la saison est complète
+                        if (possedes != null && possedes.Count >= attendus)
+                        {
+                            manque = 0;
+                        }
+
                         if (manque > 0)
                         {
                             liste.Add((new Entree
@@ -377,11 +434,15 @@ public sealed class AVenir
                     fait++;
                 }
 
-                progression?.Report(70 + (30.0 * fait / Math.Max(1, series.Count)));
+                progression?.Report(70 + (30.0 * fait / Math.Max(1, seriesParTmdb.Count)));
             }, annulation).ConfigureAwait(false);
 
             d.AVenir.AddRange(entreesSeries.Where(x => x.Futur).Select(x => x.E));
             d.Manquants.AddRange(entreesSeries.Where(x => !x.Futur).Select(x => x.E));
+
+            // Sans doublon (même clé), au cas où
+            d.AVenir = d.AVenir.GroupBy(e => e.Cle).Select(g => g.First()).ToList();
+            d.Manquants = d.Manquants.GroupBy(e => e.Cle).Select(g => g.First()).ToList();
 
             // Tri : par date (inconnues à la fin pour « À venir »), par groupe pour « Ce qui manque »
             d.AVenir = d.AVenir.OrderBy(e => string.IsNullOrEmpty(e.Date) ? "9999" : e.Date, StringComparer.Ordinal).ThenBy(e => e.Titre, StringComparer.CurrentCulture).ToList();
