@@ -18,4 +18,4 @@ Extension serveur du thème [WolfFlix](https://github.com/FenrirRavenswood/wolff
 - `POST /WolfFlix/Notes/MettreAJour` — administrateur
 
 ## Nouvelle version
-Pousser un tag `vX.Y.Z` : GitHub Actions construit la DLL, publie le zip et met à jour `manifest.json`.
+Changer le numéro dans `version.txt` et pousser sur `main` : GitHub Actions construit la DLL, publie le zip et met à jour `manifest.json`.
