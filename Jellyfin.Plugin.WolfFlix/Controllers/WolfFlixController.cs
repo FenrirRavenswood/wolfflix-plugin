@@ -57,7 +57,7 @@ public class WolfFlixController : ControllerBase
             return NotFound();
         }
 
-        var imdb = item.GetProviderId(MetadataProvider.Imdb);
+        var imdb = item.GetProviderId(MediaBrowser.Model.Entities.MetadataProvider.Imdb);
         var d = _notes.Donnees;
         if (string.IsNullOrEmpty(imdb) || !d.Titres.TryGetValue(imdb, out var n))
         {
