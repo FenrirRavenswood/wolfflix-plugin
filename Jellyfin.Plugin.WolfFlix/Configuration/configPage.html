@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>WolfFlix</title>
+</head>
+<body>
+    <div id="WolfFlixConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <h2>WolfFlix</h2>
+                <p>Réglages de l'extension du thème WolfFlix. Les clés restent sur ce serveur : elles ne sont jamais envoyées ailleurs que vers le service concerné.</p>
+
+                <form id="WolfFlixConfigForm">
+                    <h3>Clés</h3>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="TmdbCle">Clé API TMDB (v3)</label>
+                        <input id="TmdbCle" type="password" is="emby-input" autocomplete="off" />
+                        <div class="fieldDescription">Pour « À venir » et « Ce qui manque ».</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="SubdlCle">Clé API SubDL</label>
+                        <input id="SubdlCle" type="password" is="emby-input" autocomplete="off" />
+                        <div class="fieldDescription">Pour la recherche de sous-titres.</div>
+                    </div>
+
+                    <h3>Notes IMDb</h3>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="VotesMinSeries">Votes minimum pour classer une série</label>
+                        <input id="VotesMinSeries" type="number" is="emby-input" min="1" />
+                        <div class="fieldDescription">Évite qu'une série notée par 30 personnes passe devant tout le monde dans le classement global.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="VotesMinFilms">Votes minimum pour classer un film</label>
+                        <input id="VotesMinFilms" type="number" is="emby-input" min="1" />
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button"><span>Enregistrer</span></button>
+                    </div>
+                </form>
+
+                <h3>État des notes IMDb</h3>
+                <p id="WolfFlixEtat">…</p>
+                <button is="emby-button" type="button" id="WolfFlixMaj" class="raised emby-button"><span>Mettre à jour les notes maintenant</span></button>
+                <p class="fieldDescription">Sinon, la mise à jour se fait chaque nuit (tâche planifiée « WolfFlix → Notes IMDb »). La première prend plusieurs minutes.</p>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var ID = '745eb480-581d-4756-a674-5fcb31f4cb01';
+                var page = document.querySelector('#WolfFlixConfigPage');
+
+                function etat() {
+                    ApiClient.getJSON(ApiClient.getUrl('WolfFlix/Etat')).then(function (e) {
+                        var n = e.notes;
+                        var txt = n.enCours ? 'Mise à jour en cours' + (n.etape ? ' : ' + n.etape : '') + '…'
+                            : (n.titres ? n.titres + ' titres notés, dont ' + n.series + ' séries avec leurs épisodes. Dernière mise à jour : ' + new Date(n.maj).toLocaleString('fr-FR') + '.' : 'Pas encore de notes.');
+                        page.querySelector('#WolfFlixEtat').textContent = 'Extension ' + e.version + ' — ' + txt;
+                        if (n.enCours) setTimeout(etat, 4000);
+                    });
+                }
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(ID).then(function (c) {
+                        page.querySelector('#TmdbCle').value = c.TmdbCle || '';
+                        page.querySelector('#SubdlCle').value = c.SubdlCle || '';
+                        page.querySelector('#VotesMinSeries').value = c.VotesMinSeries;
+                        page.querySelector('#VotesMinFilms').value = c.VotesMinFilms;
+                        Dashboard.hideLoadingMsg();
+                    });
+                    etat();
+                });
+
+                page.querySelector('#WolfFlixConfigForm').addEventListener('submit', function (ev) {
+                    ev.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(ID).then(function (c) {
+                        c.TmdbCle = page.querySelector('#TmdbCle').value.trim();
+                        c.SubdlCle = page.querySelector('#SubdlCle').value.trim();
+                        c.VotesMinSeries = parseInt(page.querySelector('#VotesMinSeries').value, 10) || 5000;
+                        c.VotesMinFilms = parseInt(page.querySelector('#VotesMinFilms').value, 10) || 25000;
+                        ApiClient.updatePluginConfiguration(ID, c).then(function (r) {
+                            Dashboard.processPluginConfigurationUpdateResult(r);
+                        });
+                    });
+                    return false;
+                });
+
+                page.querySelector('#WolfFlixMaj').addEventListener('click', function () {
+                    ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('WolfFlix/Notes/MettreAJour') }).then(function () {
+                        setTimeout(etat, 1500);
+                    });
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

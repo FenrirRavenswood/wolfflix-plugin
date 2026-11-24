@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "745eb480-581d-4756-a674-5fcb31f4cb01",
+    "name": "WolfFlix",
+    "description": "Données côté serveur du thème WolfFlix : notes IMDb des films, séries et épisodes avec leurs classements, puis avis, à venir et sous-titres.",
+    "overview": "Extension du thème WolfFlix",
+    "owner": "FenrirRavenswood",
+    "category": "General",
+    "versions": []
+  }
+]

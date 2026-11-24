@@ -1,0 +1,79 @@
+name: Version de l'extension
+
+# Une nouvelle version : pousser un tag « vX.Y.Z ».
+# Construit la DLL pour Jellyfin 12 (.NET 10), publie le zip, met à jour manifest.json.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Numéro de version
+        id: v
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || TAG="0.0.0"
+          echo "court=$TAG" >> "$GITHUB_OUTPUT"
+          echo "long=$TAG.0" >> "$GITHUB_OUTPUT"
+
+      - name: Construction
+        run: |
+          set -o pipefail
+          dotnet publish Jellyfin.Plugin.WolfFlix/Jellyfin.Plugin.WolfFlix.csproj -c Release -o sortie \
+            -p:Version=${{ steps.v.outputs.long }} -p:AssemblyVersion=${{ steps.v.outputs.long }} -p:FileVersion=${{ steps.v.outputs.long }} 2>&1 | tee construction.log
+
+      - name: Zip
+        id: zip
+        run: |
+          NOM="wolfflix_${{ steps.v.outputs.long }}.zip"
+          (cd sortie && zip -j "../$NOM" Jellyfin.Plugin.WolfFlix.dll)
+          echo "nom=$NOM" >> "$GITHUB_OUTPUT"
+          echo "md5=$(md5sum "$NOM" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publication
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.zip.outputs.nom }}" --title "WolfFlix $GITHUB_REF_NAME" --notes-file changelog.txt || \
+          gh release upload "$GITHUB_REF_NAME" "${{ steps.zip.outputs.nom }}" --clobber
+
+      - name: manifest.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch origin main
+          git checkout main
+          python3 .github/manifeste.py "${{ steps.v.outputs.long }}" "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${{ steps.zip.outputs.nom }}" "${{ steps.zip.outputs.md5 }}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "manifest : ${{ steps.v.outputs.long }}" || exit 0
+          git push origin main
+
+      # En cas d'échec, le journal est poussé sur la branche « journaux » pour pouvoir le lire
+      - name: Journal d'échec
+        if: failure()
+        run: |
+          cp construction.log /tmp/construction.log 2>/dev/null || echo "pas de journal" > /tmp/construction.log
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout --orphan journaux
+          git rm -rf . >/dev/null 2>&1 || true
+          cp /tmp/construction.log construction.log
+          git add construction.log
+          git commit -m "échec de construction ${GITHUB_REF_NAME}"
+          git push -f origin journaux
