@@ -6,6 +6,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Jellyfin.Plugin.WolfFlix.Controllers;
 
@@ -17,14 +18,29 @@ public class WolfFlixController : ControllerBase
 {
     private readonly NotesImdb _notes;
     private readonly ILibraryManager _bibliotheque;
+    private readonly AnalyseSousTitres _sousTitres;
+    private readonly Avis _avis;
+    private readonly IUserManager _utilisateurs;
 
-    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque)
+    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs)
     {
         _notes = notes;
         _bibliotheque = bibliotheque;
+        _sousTitres = sousTitres;
+        _avis = avis;
+        _utilisateurs = utilisateurs;
     }
 
     private bool EstAdmin => User.IsInRole("Administrator");
+
+    private Guid? Moi
+    {
+        get
+        {
+            var v = User.Claims.FirstOrDefault(c => c.Type.Equals("Jellyfin-UserId", StringComparison.OrdinalIgnoreCase))?.Value;
+            return Guid.TryParse(v, out var g) ? g : null;
+        }
+    }
 
     /// <summary>Présence et état de l'extension (le thème s'en sert pour savoir si elle est installée).</summary>
     [HttpGet("Etat")]
@@ -34,7 +50,8 @@ public class WolfFlixController : ControllerBase
         return Ok(new
         {
             version = Plugin.Instance?.Version.ToString() ?? string.Empty,
-            notes = new { maj = d.Maj, titres = d.Titres.Count, series = d.Episodes.Count, enCours = _notes.EnCours, etape = _notes.Etape }
+            notes = new { maj = d.Maj, titres = d.Titres.Count, series = d.Episodes.Count, enCours = _notes.EnCours, etape = _notes.Etape },
+            sousTitres = new { analyses = _sousTitres.NbAnalyses, enCours = _sousTitres.EnCours, faits = _sousTitres.Faits, aFaire = _sousTitres.AFaire }
         });
     }
 
@@ -135,5 +152,152 @@ public class WolfFlixController : ControllerBase
         }
 
         return Accepted(new { enCours = true });
+    }
+
+    /* ---------- Sous-titres : forcé ou complet ---------- */
+
+    /// <summary>Classement des pistes de sous-titres françaises d'une vidéo. Lance l'analyse si elle n'a jamais été faite.</summary>
+    [HttpGet("Pistes/{id}")]
+    public ActionResult Pistes([FromRoute] Guid id)
+    {
+        var item = _bibliotheque.GetItemById(id);
+        if (item == null)
+        {
+            return NotFound();
+        }
+
+        var r = _sousTitres.Resultats(item);
+        if (r.Count == 0)
+        {
+            _sousTitres.Demander(item);
+        }
+
+        return Ok(r.ToDictionary(kv => kv.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), kv => new { classe = kv.Value.Classe, repliques = kv.Value.Repliques }));
+    }
+
+    /// <summary>Lance l'analyse de toute la médiathèque (administrateur), 6 h au plus.</summary>
+    [HttpPost("Pistes/ToutAnalyser")]
+    public ActionResult ToutAnalyser()
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        if (!_sousTitres.EnCours)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _sousTitres.ToutAnalyser(null, TimeSpan.FromHours(6), CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // déjà écrit dans le journal
+                }
+            });
+        }
+
+        return Accepted();
+    }
+
+    /* ---------- Avis du WolfFlix ---------- */
+
+    /// <summary>Corps d'un avis envoyé par le thème.</summary>
+    public sealed class AvisRecu
+    {
+        public double[] Criteres { get; set; } = Array.Empty<double>();
+
+        public string? Commentaire { get; set; }
+    }
+
+    /// <summary>Tous les avis d'un film ou d'une série, avec les moyennes et le classement WolfFlix.</summary>
+    [HttpGet("Avis/{id}")]
+    public ActionResult LireAvis([FromRoute] Guid id)
+    {
+        var avis = _avis.De(id);
+        var moi = Moi?.ToString("N");
+        var liste = avis.Select(kv =>
+        {
+            Guid.TryParse(kv.Key, out var uid);
+            var u = uid == Guid.Empty ? null : _utilisateurs.GetUserById(uid);
+            return new
+            {
+                utilisateur = u?.Username ?? "Ancien utilisateur",
+                utilisateurId = kv.Key,
+                moi = kv.Key == moi,
+                note = Math.Round(kv.Value.Note, 2),
+                criteres = kv.Value.Criteres,
+                commentaire = kv.Value.Commentaire,
+                date = kv.Value.Date
+            };
+        }).OrderByDescending(a => a.moi).ThenByDescending(a => a.date).ToList();
+
+        double? moyenne = liste.Count > 0 ? Math.Round(avis.Values.Average(a => a.Note), 2) : null;
+        var parCritere = Enumerable.Range(0, Avis.NbCriteres)
+            .Select(i => liste.Count > 0 ? Math.Round(avis.Values.Average(a => a.Criteres.Length > i ? a.Criteres[i] : 0), 2) : (double?)null).ToArray();
+
+        // Classement parmi les titres notés du même type (films avec films, séries avec séries)
+        int? rang = null, total = null;
+        var item = _bibliotheque.GetItemById(id);
+        if (moyenne.HasValue && item != null)
+        {
+            var type = item.GetBaseItemKind();
+            var memes = _avis.Moyennes().Where(kv => Guid.TryParse(kv.Key, out var g) && _bibliotheque.GetItemById(g)?.GetBaseItemKind() == type).ToList();
+            total = memes.Count;
+            rang = 1 + memes.Count(kv => kv.Value.Moyenne > moyenne.Value || (kv.Value.Moyenne == moyenne.Value && kv.Value.Nb > liste.Count));
+        }
+
+        return Ok(new { moyenne, nb = liste.Count, criteres = parCritere, rang, total, admin = EstAdmin, avis = liste });
+    }
+
+    /// <summary>Ajoute ou remplace ton avis.</summary>
+    [HttpPost("Avis/{id}")]
+    public ActionResult EcrireAvis([FromRoute] Guid id, [FromBody] AvisRecu corps)
+    {
+        var moi = Moi;
+        if (moi == null)
+        {
+            return Unauthorized();
+        }
+
+        var item = _bibliotheque.GetItemById(id);
+        if (item == null || (item.GetBaseItemKind() != BaseItemKind.Movie && item.GetBaseItemKind() != BaseItemKind.Series))
+        {
+            return BadRequest("Les avis sont réservés aux films et aux séries.");
+        }
+
+        if (corps.Criteres == null || corps.Criteres.Length != Avis.NbCriteres || corps.Criteres.Any(c => c < 0 || c > 5 || double.IsNaN(c)))
+        {
+            return BadRequest("Il faut 5 notes de 0 à 5.");
+        }
+
+        _avis.Enregistrer(id, moi.Value, corps.Criteres, corps.Commentaire);
+        return NoContent();
+    }
+
+    /// <summary>Retire ton avis (ou, pour un administrateur, celui de n'importe qui).</summary>
+    [HttpDelete("Avis/{id}")]
+    public ActionResult SupprimerAvis([FromRoute] Guid id, [FromQuery] string? utilisateur)
+    {
+        var moi = Moi;
+        if (moi == null)
+        {
+            return Unauthorized();
+        }
+
+        var cible = moi.Value;
+        if (!string.IsNullOrEmpty(utilisateur) && Guid.TryParse(utilisateur, out var autre) && autre != moi.Value)
+        {
+            if (!EstAdmin)
+            {
+                return Forbid();
+            }
+
+            cible = autre;
+        }
+
+        return _avis.Supprimer(id, cible) ? NoContent() : NotFound();
     }
 }

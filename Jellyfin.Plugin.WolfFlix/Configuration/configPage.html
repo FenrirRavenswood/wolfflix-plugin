@@ -43,6 +43,11 @@
                 <p id="WolfFlixEtat">…</p>
                 <button is="emby-button" type="button" id="WolfFlixMaj" class="raised emby-button"><span>Mettre à jour les notes maintenant</span></button>
                 <p class="fieldDescription">Sinon, la mise à jour se fait chaque nuit (tâche planifiée « WolfFlix → Notes IMDb »). La première prend plusieurs minutes.</p>
+
+                <h3>Sous-titres français : forcés ou complets</h3>
+                <p id="WolfFlixEtatST">…</p>
+                <button is="emby-button" type="button" id="WolfFlixST" class="raised emby-button"><span>Analyser toute la médiathèque maintenant</span></button>
+                <p class="fieldDescription">Compte les répliques de chaque piste de sous-titres française pour savoir si elle est forcée ou complète. Chaque nuit, 3 h au plus (tâche « WolfFlix → Analyse des sous-titres ») ; une vidéo jamais analysée l'est aussi dès qu'on ouvre sa fiche.</p>
             </div>
         </div>
         <script type="text/javascript">
@@ -56,7 +61,11 @@
                         var txt = n.enCours ? 'Mise à jour en cours' + (n.etape ? ' : ' + n.etape : '') + '…'
                             : (n.titres ? n.titres + ' titres notés, dont ' + n.series + ' séries avec leurs épisodes. Dernière mise à jour : ' + new Date(n.maj).toLocaleString('fr-FR') + '.' : 'Pas encore de notes.');
                         page.querySelector('#WolfFlixEtat').textContent = 'Extension ' + e.version + ' — ' + txt;
-                        if (n.enCours) setTimeout(etat, 4000);
+                        var st = e.sousTitres || {};
+                        page.querySelector('#WolfFlixEtatST').textContent = st.enCours
+                            ? 'Analyse en cours : ' + st.faits + ' / ' + st.aFaire + ' vidéos…'
+                            : st.analyses + ' vidéos analysées.';
+                        if (n.enCours || st.enCours) setTimeout(etat, 4000);
                     });
                 }
 
@@ -85,6 +94,12 @@
                         });
                     });
                     return false;
+                });
+
+                page.querySelector('#WolfFlixST').addEventListener('click', function () {
+                    ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('WolfFlix/Pistes/ToutAnalyser') }).then(function () {
+                        setTimeout(etat, 1500);
+                    });
                 });
 
                 page.querySelector('#WolfFlixMaj').addEventListener('click', function () {

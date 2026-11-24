@@ -11,5 +11,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<NotesImdb>();
+        serviceCollection.AddSingleton<AnalyseSousTitres>();
+        serviceCollection.AddSingleton<Avis>();
     }
 }

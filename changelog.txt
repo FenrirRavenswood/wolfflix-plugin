@@ -1,1 +1,2 @@
-Notes IMDb quotidiennes des films, séries et épisodes, avec classement global IMDb et classement WolfFlix.
+0.2.0 : analyse « forcé / complet » des sous-titres français ; Avis du WolfFlix (5 critères, note sur 5, commentaires).
+0.1.x : notes IMDb quotidiennes des films, séries et épisodes, avec classement global IMDb et classement WolfFlix.
