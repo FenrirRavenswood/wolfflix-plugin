@@ -6,6 +6,15 @@
     "overview": "Extension du thème WolfFlix",
     "owner": "FenrirRavenswood",
     "category": "General",
-    "versions": []
+    "versions": [
+      {
+        "version": "0.1.1.0",
+        "changelog": "Notes IMDb quotidiennes des films, séries et épisodes, avec classement global IMDb et classement WolfFlix.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/FenrirRavenswood/wolfflix-plugin/releases/download/v0.1.1/wolfflix_0.1.1.0.zip",
+        "checksum": "65dab281080d2f998be6b36314e96952",
+        "timestamp": "2026-11-24T05:19:27Z"
+      }
+    ]
   }
 ]
