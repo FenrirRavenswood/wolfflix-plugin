@@ -245,7 +245,6 @@ public sealed class AVenir
             Etape = "Séries";
             var series = _bibliotheque.GetItemList(new InternalItemsQuery { IncludeItemTypes = new[] { BaseItemKind.Series }, Recursive = true });
             var episodes = _bibliotheque.GetItemList(new InternalItemsQuery { IncludeItemTypes = new[] { BaseItemKind.Episode }, Recursive = true, IsVirtualItem = false });
-            var possedesParSaison = new Dictionary<(Guid, int), HashSet<int>>();
             // Une même série TMDB peut exister plusieurs fois dans Jellyfin (deux bibliothèques, deux dossiers) :
             // on la traite une seule fois, avec les épisodes de toutes ses copies.
             var tmdbDeSerie = new Dictionary<Guid, int>();
