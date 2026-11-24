@@ -13,5 +13,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NotesImdb>();
         serviceCollection.AddSingleton<AnalyseSousTitres>();
         serviceCollection.AddSingleton<Avis>();
+        serviceCollection.AddSingleton<AVenir>();
     }
 }

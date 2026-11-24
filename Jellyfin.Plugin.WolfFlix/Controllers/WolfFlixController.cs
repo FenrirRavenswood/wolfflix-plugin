@@ -21,9 +21,11 @@ public class WolfFlixController : ControllerBase
     private readonly AnalyseSousTitres _sousTitres;
     private readonly Avis _avis;
     private readonly IUserManager _utilisateurs;
+    private readonly AVenir _aVenir;
 
-    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs)
+    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir)
     {
+        _aVenir = aVenir;
         _notes = notes;
         _bibliotheque = bibliotheque;
         _sousTitres = sousTitres;
@@ -51,7 +53,8 @@ public class WolfFlixController : ControllerBase
         {
             version = Plugin.Instance?.Version.ToString() ?? string.Empty,
             notes = new { maj = d.Maj, titres = d.Titres.Count, series = d.Episodes.Count, enCours = _notes.EnCours, etape = _notes.Etape },
-            sousTitres = new { analyses = _sousTitres.NbAnalyses, enCours = _sousTitres.EnCours, faits = _sousTitres.Faits, aFaire = _sousTitres.AFaire }
+            sousTitres = new { analyses = _sousTitres.NbAnalyses, enCours = _sousTitres.EnCours, faits = _sousTitres.Faits, aFaire = _sousTitres.AFaire },
+            aVenir = new { maj = _aVenir.Donnees.Maj, aVenir = _aVenir.Donnees.AVenir.Count, manquants = _aVenir.Donnees.Manquants.Count, enCours = _aVenir.EnCours, etape = _aVenir.Etape, tmdb = !string.IsNullOrWhiteSpace(Plugin.Instance?.Configuration.TmdbCle) }
         });
     }
 
@@ -299,5 +302,64 @@ public class WolfFlixController : ControllerBase
         }
 
         return _avis.Supprimer(id, cible) ? NoContent() : NotFound();
+    }
+
+    /* ---------- À venir / Ce qui manque ---------- */
+
+    /// <summary>Prochaines sorties et titres manquants (les éléments ignorés sont retirés, sauf pour l'administrateur qui les voit marqués).</summary>
+    [HttpGet("AVenir")]
+    public ActionResult LireAVenir()
+    {
+        var d = _aVenir.Donnees;
+        var ignores = _aVenir.Ignores();
+        bool admin = EstAdmin;
+        object Liste(List<Entree> l) => l.Where(e => admin || !ignores.Contains(e.Cle))
+            .Select(e => new { e.Cle, e.Type, e.Titre, e.Detail, e.Date, e.DateFrance, e.Affiche, e.Tmdb, e.Groupe, e.Lien, ignore = ignores.Contains(e.Cle) }).ToList();
+        return Ok(new { maj = d.Maj, enCours = _aVenir.EnCours, etape = _aVenir.Etape, admin, aVenir = Liste(d.AVenir), manquants = Liste(d.Manquants) });
+    }
+
+    /// <summary>Ignorer (ou ne plus ignorer) une entrée (administrateur).</summary>
+    [HttpPost("AVenir/Ignorer")]
+    public ActionResult Ignorer([FromQuery] string cle, [FromQuery] bool oui = true)
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(cle))
+        {
+            return BadRequest();
+        }
+
+        _aVenir.Ignorer(cle, oui);
+        return NoContent();
+    }
+
+    /// <summary>Recalcule « À venir » maintenant (administrateur).</summary>
+    [HttpPost("AVenir/MettreAJour")]
+    public ActionResult MettreAJourAVenir()
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        if (!_aVenir.EnCours)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _aVenir.MettreAJour(null, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // déjà écrit dans le journal
+                }
+            });
+        }
+
+        return Accepted();
     }
 }

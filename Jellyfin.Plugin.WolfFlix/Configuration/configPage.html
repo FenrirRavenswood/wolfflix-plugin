@@ -47,6 +47,11 @@
                 <h3>Sous-titres français : forcés ou complets</h3>
                 <p id="WolfFlixEtatST">…</p>
                 <button is="emby-button" type="button" id="WolfFlixST" class="raised emby-button"><span>Analyser toute la médiathèque maintenant</span></button>
+                <h3>À venir et Ce qui manque</h3>
+                <p id="WolfFlixEtatAV">…</p>
+                <button is="emby-button" type="button" id="WolfFlixAV" class="raised emby-button"><span>Recalculer maintenant</span></button>
+                <p class="fieldDescription">Compare tes sagas et tes séries à TMDB (clé TMDB nécessaire). Chaque nuit à 4 h ; la première fois prend quelques minutes.</p>
+
                 <p class="fieldDescription">Compte les répliques de chaque piste de sous-titres française pour savoir si elle est forcée ou complète. Chaque nuit, 3 h au plus (tâche « WolfFlix → Analyse des sous-titres ») ; une vidéo jamais analysée l'est aussi dès qu'on ouvre sa fiche.</p>
             </div>
         </div>
@@ -65,7 +70,11 @@
                         page.querySelector('#WolfFlixEtatST').textContent = st.enCours
                             ? 'Analyse en cours : ' + st.faits + ' / ' + st.aFaire + ' vidéos…'
                             : st.analyses + ' vidéos analysées.';
-                        if (n.enCours || st.enCours) setTimeout(etat, 4000);
+                        var av = e.aVenir || {};
+                        page.querySelector('#WolfFlixEtatAV').textContent = !av.tmdb ? 'Ajoute ta clé TMDB ci-dessus.'
+                            : av.enCours ? 'Calcul en cours' + (av.etape ? ' : ' + av.etape : '') + '…'
+                            : (av.aVenir || av.manquants ? av.aVenir + ' à venir, ' + av.manquants + ' manquants. Dernier calcul : ' + new Date(av.maj).toLocaleString('fr-FR') + '.' : 'Pas encore calculé.');
+                        if (n.enCours || st.enCours || av.enCours) setTimeout(etat, 4000);
                     });
                 }
 
@@ -94,6 +103,12 @@
                         });
                     });
                     return false;
+                });
+
+                page.querySelector('#WolfFlixAV').addEventListener('click', function () {
+                    ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('WolfFlix/AVenir/MettreAJour') }).then(function () {
+                        setTimeout(etat, 1500);
+                    });
                 });
 
                 page.querySelector('#WolfFlixST').addEventListener('click', function () {
