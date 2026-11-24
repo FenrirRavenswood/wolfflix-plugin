@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.0.0",
+        "changelog": "0.2.0 : analyse « forcé / complet » des sous-titres français ; Avis du WolfFlix (5 critères, note sur 5, commentaires).\n0.1.x : notes IMDb quotidiennes des films, séries et épisodes, avec classement global IMDb et classement WolfFlix.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/FenrirRavenswood/wolfflix-plugin/releases/download/v0.2.0/wolfflix_0.2.0.0.zip",
+        "checksum": "24f2ec2b90bfb14d55a4d58c9af08bdf",
+        "timestamp": "2026-11-24T05:28:11Z"
+      },
+      {
         "version": "0.1.1.0",
         "changelog": "Notes IMDb quotidiennes des films, séries et épisodes, avec classement global IMDb et classement WolfFlix.",
         "targetAbi": "12.0.0.0",
