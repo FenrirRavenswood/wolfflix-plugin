@@ -1,4 +1,6 @@
 using Jellyfin.Plugin.WolfFlix.Services;
+using Jellyfin.Plugin.WolfFlix.SousTitres;
+using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,5 +16,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<AnalyseSousTitres>();
         serviceCollection.AddSingleton<Avis>();
         serviceCollection.AddSingleton<AVenir>();
+
+        // Sources de sous-titres gratuites (visibles dans « Rechercher des sous-titres » et le téléchargement auto)
+        serviceCollection.AddSingleton<ISubtitleProvider, SourceSubdl>();
+        serviceCollection.AddSingleton<ISubtitleProvider, SourcePodnapisi>();
     }
 }
