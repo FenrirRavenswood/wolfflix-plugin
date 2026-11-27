@@ -1,3 +1,4 @@
+0.6.0 : sagas et cycles possibles pour l'administrateur (collections TMDB, univers Wikidata).
 0.5.2 : « À venir » sans doublons (série présente plusieurs fois dans Jellyfin) ; « Ce qui manque » ne signale plus une série complète numérotée autrement que TMDB.
 0.5.0 : suivi personnel (historique de tout ce qui est vu, lu ou écouté ; objectifs de l'année).
 0.4.0 : sources de sous-titres gratuites « WolfFlix · SubDL » et « WolfFlix · Podnapisi » (recherche manuelle et téléchargement automatique, packs de saison, sous-titres forcés reconnus).

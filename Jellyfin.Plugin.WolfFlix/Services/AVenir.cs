@@ -498,7 +498,7 @@ public sealed class AVenir
         return string.Empty;
     }
 
-    private static async Task Parallele<T>(IList<T> elements, int largeur, Func<T, Task> action, CancellationToken annulation)
+    internal static async Task Parallele<T>(IList<T> elements, int largeur, Func<T, Task> action, CancellationToken annulation)
     {
         using var porte = new SemaphoreSlim(largeur);
         var taches = elements.Select(async e =>
@@ -524,7 +524,7 @@ public sealed class AVenir
         await Task.WhenAll(taches).ConfigureAwait(false);
     }
 
-    private static async Task<JsonDocument?> Demander(HttpClient client, string chemin, string cle, CancellationToken annulation, bool francais = true)
+    internal static async Task<JsonDocument?> Demander(HttpClient client, string chemin, string cle, CancellationToken annulation, bool francais = true)
     {
         var url = Api + chemin + "?api_key=" + Uri.EscapeDataString(cle) + (francais ? "&language=fr-FR" : string.Empty);
         for (int essai = 0; essai < 3; essai++)
@@ -548,7 +548,7 @@ public sealed class AVenir
         return null;
     }
 
-    private static string Texte(JsonElement e, string nom)
+    internal static string Texte(JsonElement e, string nom)
         => e.TryGetProperty(nom, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? string.Empty : string.Empty;
 
     private static int Entier(JsonElement e, string nom)
@@ -560,7 +560,7 @@ public sealed class AVenir
         return string.IsNullOrEmpty(p) ? string.Empty : Images + p;
     }
 
-    private static T? Lire<T>(string nom)
+    internal static T? Lire<T>(string nom)
         where T : class
     {
         try
@@ -574,7 +574,7 @@ public sealed class AVenir
         }
     }
 
-    private static void Ecrire<T>(string nom, T valeur)
+    internal static void Ecrire<T>(string nom, T valeur)
     {
         var p = Path.Combine(Dossier, nom);
         var tmp = p + ".tmp";

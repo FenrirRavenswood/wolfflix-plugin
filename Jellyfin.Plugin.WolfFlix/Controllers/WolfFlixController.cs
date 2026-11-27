@@ -23,10 +23,12 @@ public class WolfFlixController : ControllerBase
     private readonly IUserManager _utilisateurs;
     private readonly AVenir _aVenir;
     private readonly Suivi _suivi;
+    private readonly Suggestions _suggestions;
 
-    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi)
+    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi, Suggestions suggestions)
     {
         _suivi = suivi;
+        _suggestions = suggestions;
         _aVenir = aVenir;
         _notes = notes;
         _bibliotheque = bibliotheque;
@@ -404,5 +406,63 @@ public class WolfFlixController : ControllerBase
         }
 
         return _suivi.Retirer(moi, item ?? string.Empty, date) ? NoContent() : NotFound();
+    }
+    /// <summary>Sagas (type=s) ou cycles (type=c) possibles, d'après TMDB et Wikidata. Administrateurs seulement.</summary>
+    [HttpGet("Suggestions")]
+    public ActionResult LireSuggestions([FromQuery] string type = "s")
+    {
+        if (!User.IsInRole("Administrator"))
+        {
+            return Forbid();
+        }
+
+        var d = _suggestions.Donnees;
+        if (d == null && !_suggestions.EnCours)
+        {
+            _suggestions.Demarrer();
+        }
+
+        var ignorees = new HashSet<string>(Services.AVenir.Lire<List<string>>("suggestions-ignorees.json") ?? new List<string>());
+        var liste = (type == "c" ? d?.Cycles : d?.Sagas) ?? new List<Proposition>();
+        return Ok(new
+        {
+            enCours = _suggestions.EnCours,
+            etape = _suggestions.Etape,
+            maj = d?.Maj,
+            tmdb = !string.IsNullOrWhiteSpace(Plugin.Instance?.Configuration.TmdbCle),
+            propositions = liste.Where(p => !ignorees.Contains(p.Cle))
+        });
+    }
+
+    /// <summary>Relance la recherche de sagas et cycles possibles.</summary>
+    [HttpPost("Suggestions/Calculer")]
+    public ActionResult CalculerSuggestions()
+    {
+        if (!User.IsInRole("Administrator"))
+        {
+            return Forbid();
+        }
+
+        _suggestions.Demarrer();
+        return Accepted();
+    }
+
+    /// <summary>Ne plus proposer une saga ou un cycle.</summary>
+    [HttpPost("Suggestions/Ignorer")]
+    public ActionResult IgnorerSuggestion([FromQuery] string cle)
+    {
+        if (!User.IsInRole("Administrator"))
+        {
+            return Forbid();
+        }
+
+        var l = Services.AVenir.Lire<List<string>>("suggestions-ignorees.json") ?? new List<string>();
+        if (!string.IsNullOrEmpty(cle) && !l.Contains(cle))
+        {
+            l.Add(cle);
+            Services.AVenir.Ecrire("suggestions-ignorees.json", l);
+        }
+
+        return NoContent();
     }
 }

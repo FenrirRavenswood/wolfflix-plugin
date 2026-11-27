@@ -16,6 +16,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<AnalyseSousTitres>();
         serviceCollection.AddSingleton<Avis>();
         serviceCollection.AddSingleton<AVenir>();
+        serviceCollection.AddSingleton<Suggestions>();
         serviceCollection.AddSingleton<Suivi>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<Suivi>());
 
