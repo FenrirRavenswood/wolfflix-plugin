@@ -25,9 +25,11 @@ public class WolfFlixController : ControllerBase
     private readonly Suivi _suivi;
     private readonly Suggestions _suggestions;
     private readonly Sante _sante;
+    private readonly Journal _journal;
 
-    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi, Suggestions suggestions, Sante sante)
+    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi, Suggestions suggestions, Sante sante, Journal journal)
     {
+        _journal = journal;
         _sante = sante;
         _suivi = suivi;
         _suggestions = suggestions;
@@ -508,5 +510,18 @@ public class WolfFlixController : ControllerBase
 
         _sante.EffacerAlertes();
         return NoContent();
+    }
+
+    /// <summary>Journal d'activité : dernières lectures (qui, quoi, direct ou transcodé et pourquoi).</summary>
+    [HttpGet("Journal")]
+    public ActionResult LireJournal([FromQuery] int jours = 30)
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        var depuis = DateTime.UtcNow.AddDays(-Math.Clamp(jours, 1, 3650));
+        return Ok(_journal.Lire().Where(l => l.Fin >= depuis).ToList());
     }
 }

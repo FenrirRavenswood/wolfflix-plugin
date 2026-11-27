@@ -20,6 +20,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<Sante>();
         serviceCollection.AddSingleton<Suivi>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<Suivi>());
+        serviceCollection.AddSingleton<Journal>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<Journal>());
 
         // Sources de sous-titres gratuites (visibles dans « Rechercher des sous-titres » et le téléchargement auto)
         serviceCollection.AddSingleton<ISubtitleProvider, SourceSubdl>();
