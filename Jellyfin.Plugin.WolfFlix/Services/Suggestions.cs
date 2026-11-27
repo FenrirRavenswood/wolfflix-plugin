@@ -129,10 +129,34 @@ public sealed class Suggestions
             var couverts = Collections();
 
             Etape = "Sagas (TMDB)";
-            d.Sagas = await Sagas(couverts, annulation).ConfigureAwait(false);
+            var sagasTmdb = await Sagas(couverts, annulation).ConfigureAwait(false);
+
+            Etape = "Univers et franchises (Wikidata)";
+            var univers = await UniversDesTitres(annulation).ConfigureAwait(false);
+
+            // Sagas : collections TMDB + films d'un même univers / franchise / série de films (ex. MCU complet)
+            var sagasWd = new List<Proposition>();
+            foreach (var (qid, g) in univers)
+            {
+                var films = g.Titres.Where(t => t is Movie).ToList();
+                if (films.Count < 2)
+                {
+                    continue;
+                }
+
+                var p = Construire("wd:" + qid, g.Nom, "Wikidata", films, couverts);
+                if (p != null)
+                {
+                    sagasWd.Add(p);
+                }
+            }
+
+            // Même liste de films qu'une collection TMDB : on garde la proposition TMDB (nom français officiel)
+            var ensemblesTmdb = new HashSet<string>(sagasTmdb.Select(Signature));
+            d.Sagas = Trier(Dedoublonner(sagasTmdb.Concat(sagasWd.Where(p => !ensemblesTmdb.Contains(Signature(p))))));
 
             Etape = "Cycles (Wikidata)";
-            d.Cycles = await Cycles(couverts, annulation).ConfigureAwait(false);
+            d.Cycles = Cycles(couverts, univers);
 
             AVenir.Ecrire("suggestions.json", d);
         }
@@ -283,9 +307,17 @@ public sealed class Suggestions
     }
 
     // ------------------------------------------------------------------ cycles : univers Wikidata
-    private async Task<List<Proposition>> Cycles(List<(string Id, string Nom, HashSet<Guid> Ids)> couverts, CancellationToken annulation)
+    private static string Signature(Proposition p) => string.Join(',', p.Titres.Select(t => t.Id).OrderBy(x => x, StringComparer.Ordinal));
+
+    private static List<Proposition> Dedoublonner(IEnumerable<Proposition> l)
+        => l.GroupBy(Signature).Select(g => g.First()).ToList();
+
+    private static List<Proposition> Trier(IEnumerable<Proposition> l)
+        => l.OrderBy(p => p.ExistanteId.Length == 0).ThenByDescending(p => p.Titres.Count).ThenBy(p => p.Nom).ToList();
+
+    /// <summary>Univers, franchises et séries de films (Wikidata) des séries et films de la bibliothèque.</summary>
+    private async Task<Dictionary<string, (string Nom, List<BaseItem> Titres)>> UniversDesTitres(CancellationToken annulation)
     {
-        var res = new List<Proposition>();
         var titres = _bibliotheque.GetItemList(new InternalItemsQuery { IncludeItemTypes = new[] { BaseItemKind.Series, BaseItemKind.Movie }, Recursive = true, IsVirtualItem = false });
         var parImdb = new Dictionary<string, BaseItem>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in titres)
@@ -324,7 +356,6 @@ public sealed class Suggestions
 
         AVenir.Ecrire("univers-wikidata.json", cache);
 
-        // Regroupement : un univers avec au moins 2 titres dont au moins une série
         var parUnivers = new Dictionary<string, (string Nom, List<BaseItem> Titres)>();
         foreach (var (imdb, item) in parImdb)
         {
@@ -348,9 +379,18 @@ public sealed class Suggestions
             }
         }
 
-        foreach (var (qid, g) in parUnivers)
+        return parUnivers
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value.Nom) && !System.Text.RegularExpressions.Regex.IsMatch(kv.Value.Nom, @"^Q\d+$"))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    // ------------------------------------------------------------------ cycles : univers avec au moins une série
+    private static List<Proposition> Cycles(List<(string Id, string Nom, HashSet<Guid> Ids)> couverts, Dictionary<string, (string Nom, List<BaseItem> Titres)> univers)
+    {
+        var res = new List<Proposition>();
+        foreach (var (qid, g) in univers)
         {
-            if (!g.Titres.OfType<Series>().Any() || g.Titres.Count < 2 || string.IsNullOrWhiteSpace(g.Nom) || System.Text.RegularExpressions.Regex.IsMatch(g.Nom, @"^Q\d+$"))
+            if (!g.Titres.OfType<Series>().Any() || g.Titres.Count < 2)
             {
                 continue;
             }
@@ -362,11 +402,8 @@ public sealed class Suggestions
             }
         }
 
-        // Un univers et sa sous-partie peuvent proposer exactement les mêmes titres : on garde le plus grand nom une fois
-        res = res.GroupBy(p => string.Join(',', p.Titres.Select(t => t.Id).OrderBy(x => x, StringComparer.Ordinal)))
-            .Select(g => g.OrderByDescending(p => p.Titres.Count).First())
-            .ToList();
-        return res.OrderBy(p => p.ExistanteId.Length == 0).ThenByDescending(p => p.Titres.Count).ThenBy(p => p.Nom).ToList();
+        // Un univers et sa sous-partie peuvent proposer exactement les mêmes titres : une seule fois
+        return Trier(Dedoublonner(res));
     }
 
     /// <summary>imdb → (identifiant Wikidata de l'univers → nom en français), ou null si Wikidata ne répond pas.</summary>

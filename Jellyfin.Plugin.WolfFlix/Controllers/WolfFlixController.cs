@@ -24,9 +24,11 @@ public class WolfFlixController : ControllerBase
     private readonly AVenir _aVenir;
     private readonly Suivi _suivi;
     private readonly Suggestions _suggestions;
+    private readonly Sante _sante;
 
-    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi, Suggestions suggestions)
+    public WolfFlixController(NotesImdb notes, ILibraryManager bibliotheque, AnalyseSousTitres sousTitres, Avis avis, IUserManager utilisateurs, AVenir aVenir, Suivi suivi, Suggestions suggestions, Sante sante)
     {
+        _sante = sante;
         _suivi = suivi;
         _suggestions = suggestions;
         _aVenir = aVenir;
@@ -463,6 +465,48 @@ public class WolfFlixController : ControllerBase
             Services.AVenir.Ecrire("suggestions-ignorees.json", l);
         }
 
+        return NoContent();
+    }
+
+    /// <summary>Santé du serveur (administrateurs).</summary>
+    [HttpGet("Sante")]
+    public ActionResult LireSante()
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        var d = _sante.Donnees;
+        if ((d == null || DateTime.UtcNow - d.Maj > TimeSpan.FromHours(6)) && !_sante.EnCours)
+        {
+            _sante.Demarrer();
+        }
+
+        return Ok(new { enCours = _sante.EnCours, donnees = d });
+    }
+
+    [HttpPost("Sante/Calculer")]
+    public ActionResult CalculerSante()
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        _sante.Demarrer();
+        return Accepted();
+    }
+
+    [HttpPost("Sante/AlertesLues")]
+    public ActionResult AlertesLues()
+    {
+        if (!EstAdmin)
+        {
+            return Forbid();
+        }
+
+        _sante.EffacerAlertes();
         return NoContent();
     }
 }
